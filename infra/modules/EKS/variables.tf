@@ -31,8 +31,8 @@ variable "public_access_cidrs" {
 }
 
 variable "cluster_authentication_mode" {
-  type        = string
-  default     = "API"
+  type    = string
+  default = "API"
 }
 
 variable "node_instance_types" {

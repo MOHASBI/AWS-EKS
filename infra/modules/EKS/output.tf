@@ -37,3 +37,13 @@ output "cluster_iam_role_arn" {
 output "node_iam_role_arn" {
   value = aws_iam_role.node.arn
 }
+
+output "oidc_issuer_url" {
+  description = "OIDC issuer URL for IRSA trust policies and Helm (e.g. AWS LB Controller)"
+  value       = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
+output "oidc_provider_arn" {
+  description = "IAM OIDC provider ARN; use in IRSA role trust policies"
+  value       = var.enable_irsa ? aws_iam_openid_connect_provider.eks[0].arn : null
+}
