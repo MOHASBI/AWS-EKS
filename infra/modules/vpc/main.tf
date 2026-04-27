@@ -8,29 +8,31 @@ terraform {
     }
   }
 }
-//create vpc
+
 resource "aws_vpc" "main" {
-  cidr_block       = "10.0.0.0/16"
+  cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
-  
+
   tags = {
-    Name = "ecs_vpc"
+    Name = "eks_vpc"
   }
 }
 
-//create subnets for each AZ
-resource "aws_subnet" "public"{
-    count = length(var.public_subnet_cidrs)
-    vpc_id = aws_vpc.main.id
-    availability_zone = var.availability_zones[count.index]
-    cidr_block = var.public_subnet_cidrs[count.index]
-    
-    tags = {
-        Name = "public${count.index + 1}"
-    }
+resource "aws_subnet" "public" {
+  count             = length(var.public_subnet_cidrs)
+  vpc_id            = aws_vpc.main.id
+  availability_zone = var.availability_zones[count.index]
+  cidr_block        = var.public_subnet_cidrs[count.index]
+
+  tags = merge(
+    { Name = "public${count.index + 1}" },
+    var.cluster_name != "" ? {
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+      "kubernetes.io/role/elb"                    = "1"
+    } : {}
+  )
 }
 
-//Create IGW
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
 
@@ -39,7 +41,6 @@ resource "aws_internet_gateway" "igw" {
   }
 }
 
-//Create route table
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -53,27 +54,30 @@ resource "aws_route_table" "public" {
   }
 }
 
-//associate the igw with the subnets
+
 resource "aws_route_table_association" "a" {
   count          = length(var.public_subnet_cidrs)
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
-//private subnets
+
 resource "aws_subnet" "private" {
   count             = length(var.private_subnet_cidrs)
   vpc_id            = aws_vpc.main.id
   cidr_block        = var.private_subnet_cidrs[count.index]
   availability_zone = var.availability_zones[count.index]
 
-  tags = {
-    Name = "private${count.index + 1}"
-  }
+  tags = merge(
+    { Name = "private${count.index + 1}" },
+    var.cluster_name != "" ? {
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+      "kubernetes.io/role/internal-elb"           = "1"
+    } : {}
+  )
 }
 
 
-//create a gateway endpoint for s3 and dynamodb
 resource "aws_vpc_endpoint" "s3" {
   vpc_id          = aws_vpc.main.id
   service_name    = "com.amazonaws.${var.region}.s3"
@@ -83,14 +87,13 @@ resource "aws_vpc_endpoint" "s3" {
   }
 }
 
-//create a interface endpoint for every other service
 resource "aws_vpc_endpoint" "ecr" {
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.${var.region}.ecr.dkr"
   vpc_endpoint_type = "Interface"
 
-  subnet_ids = aws_subnet.private[*].id
-  security_group_ids = [aws_security_group.endpoints.id]
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.endpoints.id]
   private_dns_enabled = true
 }
 
@@ -108,15 +111,72 @@ resource "aws_vpc_endpoint" "ecr_api" {
 }
 
 resource "aws_vpc_endpoint" "logs" {
-  vpc_id            = aws_vpc.main.id
-  service_name      = "com.amazonaws.${var.region}.logs"
-  vpc_endpoint_type = "Interface"
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.logs"
+  vpc_endpoint_type   = "Interface"
   subnet_ids          = aws_subnet.private[*].id
-  security_group_ids = [aws_security_group.endpoints.id]
+  security_group_ids  = [aws_security_group.endpoints.id]
   private_dns_enabled = true
 }
 
-//route table for the private subnets
+# Required for private worker nodes without NAT: kubelet / IRSA need STS; API needs EKS endpoint when using private access.
+resource "aws_vpc_endpoint" "sts" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.sts"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.endpoints.id]
+  private_dns_enabled = true
+
+  tags = { Name = "sts-endpoint" }
+}
+
+resource "aws_vpc_endpoint" "eks" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.eks"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.endpoints.id]
+  private_dns_enabled = true
+
+  tags = { Name = "eks-endpoint" }
+}
+
+# AWS Load Balancer Controller + NLB/ALB provisioning from private nodes (no NAT).
+resource "aws_vpc_endpoint" "ec2" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.ec2"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.endpoints.id]
+  private_dns_enabled = true
+
+  tags = { Name = "ec2-endpoint" }
+}
+
+resource "aws_vpc_endpoint" "elb" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.elasticloadbalancing"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.endpoints.id]
+  private_dns_enabled = true
+
+  tags = { Name = "elb-endpoint" }
+}
+
+# ExternalDNS / CertManager Route53 integration without NAT.
+resource "aws_vpc_endpoint" "route53" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.route53"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.endpoints.id]
+  private_dns_enabled = true
+
+  tags = { Name = "route53-endpoint" }
+}
+
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
@@ -125,14 +185,12 @@ resource "aws_route_table" "private" {
   }
 }
 
-//private route table aws_route_table_association
 resource "aws_route_table_association" "private_asso1" {
   count          = length(var.private_subnet_cidrs)
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
 
-//create a security group for the endpoints
 resource "aws_security_group" "endpoints" {
   name        = "endpoints-sg"
   description = "Security group for the endpoints"

@@ -31,3 +31,57 @@ variable "private_subnet_cidrs" {
   type    = list(any)
   default = ["10.0.3.0/24", "10.0.4.0/24"]
 }
+
+variable "cluster_name" {
+  type        = string
+  default     = "eks-2048"
+}
+
+variable "cluster_version" {
+  type        = string
+  default     = "1.31"
+}
+
+variable "common_tags" {
+  description = "Tags applied to VPC and EKS resources"
+  type        = map(string)
+  default = {
+    Project = "cloud-native-eks"
+  }
+}
+
+variable "eks_endpoint_public_access" {
+  description = "Expose Kubernetes API publicly (pair with eks_public_access_cidrs for your IP in production)"
+  type        = bool
+  default     = true
+}
+
+variable "eks_public_access_cidrs" {
+  type    = list(string)
+  default = ["0.0.0.0/0"]
+}
+
+variable "eks_node_instance_types" {
+  type    = list(string)
+  default = ["t3.medium"]
+}
+
+variable "eks_node_desired_size" {
+  type    = number
+  default = 2
+}
+
+variable "eks_node_min_size" {
+  type    = number
+  default = 1
+}
+
+variable "eks_node_max_size" {
+  type    = number
+  default = 4
+}
+
+variable "eks_node_disk_size" {
+  type    = number
+  default = 50
+}
