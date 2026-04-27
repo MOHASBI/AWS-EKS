@@ -1,0 +1,13 @@
+installCRDs: true
+
+replicaCount: 2
+
+serviceAccount:
+  create: true
+  name: cert-manager
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::848153448908:role/cert-manager"
+
+prometheus:
+  enabled: true
+

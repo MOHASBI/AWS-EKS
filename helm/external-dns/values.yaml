@@ -1,0 +1,23 @@
+provider:
+  name: aws
+
+domainFilters:
+  - mohamedhassanproject.com
+
+policy: sync
+registry: txt
+txtOwnerId: eks-2048
+
+serviceAccount:
+  create: true
+  name: external-dns
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::848153448908:role/external-dns"
+
+sources:
+  - ingress
+  - service
+
+extraArgs:
+  - --aws-zone-type=public
+
