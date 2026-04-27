@@ -1,6 +1,6 @@
 # Helm Install Order
 
-Run these after Terraform has applied and `kubectl` can reach the cluster.
+Helm releases are managed by Terraform through `infra/modules/helm`.
 
 ## 1. Configure kubeconfig
 
@@ -9,82 +9,40 @@ aws eks update-kubeconfig --region eu-west-2 --name eks-2048
 kubectl get nodes
 ```
 
-## 2. Install NGINX Ingress
+## 2. Install the platform charts with Terraform
 
 ```bash
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo update
-helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx \
-  --create-namespace \
-  --values helm/nginx-ingress/values.yaml
+terraform -chdir=infra init -upgrade
+terraform -chdir=infra apply
 ```
 
-## 3. Install cert-manager
+Terraform installs:
 
-Replace the role ARN placeholder in `helm/cert-manager/values.yaml` with:
+- NGINX Ingress Controller
+- cert-manager
+- ExternalDNS
+- Argo CD
+- kube-prometheus-stack
 
-```bash
-terraform -chdir=infra output -raw irsa_cert_manager_role_arn
-```
+The chart values live in:
 
-Then install:
+- `helm/nginx-ingress/values.yaml`
+- `helm/cert-manager/values.yaml`
+- `helm/external-dns/values.yaml`
+- `helm/argocd/values.yaml`
+- `helm/monitoring/values.yaml`
 
-```bash
-helm repo add jetstack https://charts.jetstack.io
-helm repo update
-helm upgrade --install cert-manager jetstack/cert-manager \
-  --namespace cert-manager \
-  --create-namespace \
-  --values helm/cert-manager/values.yaml
-```
+## 3. Apply the cert-manager ClusterIssuer
 
-Update `k8s/cert-manager/cluster-issuer.yaml` with your email, then:
+Terraform installs cert-manager itself, but the `ClusterIssuer` is still a Kubernetes manifest:
 
 ```bash
 kubectl apply -f k8s/cert-manager/cluster-issuer.yaml
 ```
 
-## 4. Install ExternalDNS
-
-Replace the role ARN placeholder in `helm/external-dns/values.yaml` with:
-
-```bash
-terraform -chdir=infra output -raw irsa_external_dns_role_arn
-```
-
-Then install:
-
-```bash
-helm repo add external-dns https://kubernetes-sigs.github.io/external-dns/
-helm repo update
-helm upgrade --install external-dns external-dns/external-dns \
-  --namespace external-dns \
-  --create-namespace \
-  --values helm/external-dns/values.yaml
-```
-
-## 5. Deploy the app
+## 4. Deploy the app
 
 ```bash
 kubectl apply -f k8s/app/
-```
-
-## 6. Optional: Argo CD and Monitoring
-
-```bash
-helm repo add argo https://argoproj.github.io/argo-helm
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
-
-helm upgrade --install argocd argo/argo-cd \
-  --namespace argocd \
-  --create-namespace \
-  --values helm/argocd/values.yaml
-
-helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-  --namespace monitoring \
-  --create-namespace \
-  --values helm/monitoring/values.yaml
 ```
 

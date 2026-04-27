@@ -52,3 +52,23 @@ output "irsa_external_dns_role_arn" {
   description = "external-dns ServiceAccount: eks.amazonaws.com/role-arn"
   value       = try(module.external_dns_irsa_role[0].iam_role_arn, null)
 }
+
+output "helm_nginx_ingress_status" {
+  value = module.helm.nginx_ingress_status
+}
+
+output "helm_cert_manager_status" {
+  value = module.helm.cert_manager_status
+}
+
+output "helm_external_dns_status" {
+  value = module.helm.external_dns_status
+}
+
+output "helm_argocd_status" {
+  value = module.helm.argocd_status
+}
+
+output "helm_monitoring_status" {
+  value = module.helm.monitoring_status
+}

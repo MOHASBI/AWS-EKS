@@ -33,3 +33,19 @@ module "eks" {
 
   tags = var.common_tags
 }
+
+module "helm" {
+  source = "./modules/helm"
+
+  nginx_ingress_values = file("${path.module}/../helm/nginx-ingress/values.yaml")
+  cert_manager_values  = file("${path.module}/../helm/cert-manager/values.yaml")
+  external_dns_values  = file("${path.module}/../helm/external-dns/values.yaml")
+  argocd_values        = file("${path.module}/../helm/argocd/values.yaml")
+  monitoring_values    = file("${path.module}/../helm/monitoring/values.yaml")
+
+  depends_on = [
+    module.eks,
+    module.cert_manager_irsa_role,
+    module.external_dns_irsa_role,
+  ]
+}
