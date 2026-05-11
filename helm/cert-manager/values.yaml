@@ -1,13 +1,11 @@
-installCRDs: true
+installCRDs: true  
 
-replicaCount: 2
+extraArgs:
+  - --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
+  - --dns01-recursive-nameservers-only
 
 serviceAccount:
   create: true
   name: cert-manager
-  annotations:
-    eks.amazonaws.com/role-arn: "arn:aws:iam::848153448908:role/cert-manager"
-
-prometheus:
-  enabled: true
+  annotations: {}
 
